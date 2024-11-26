@@ -1,68 +1,77 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Body } from '@nestjs/common';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { Transaction } from './interfaces/transaction.interface';
-import { v4 as uuidv4 } from 'uuid';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Transaction } from './entities/transaction.entity';
+import { Repository } from 'typeorm';
 
 @Injectable()
 export class TransactionsService {
-  private transactions: Transaction[] = [];
   private readonly logger = new Logger(TransactionsService.name);
 
-  async createTransaction(createTransactionDto: CreateTransactionDto): Promise<void> {
-    const { email } = createTransactionDto;
-    const findedTransaction = this.transactions.find(transaction => transaction.email === email);
+  constructor(
+    @InjectRepository(Transaction)
+    private readonly transactionRepository: Repository<Transaction>
+  ) {}
 
-    if (findedTransaction) {
-      this.update(findedTransaction, createTransactionDto);
-    } else {
-      this.create(createTransactionDto);
+  async createTransaction(createTransactionDto: CreateTransactionDto[]): Promise<void> {
+    for (const dto of createTransactionDto) {
+      const { id } = dto;
+
+      const existingTransaction = id
+        ? await this.transactionRepository.findOneBy({ id })
+        : null;
+      if (existingTransaction) {
+
+        await this.update(existingTransaction, dto);
+      } else {
+
+        await this.create(dto);
+      }
     }
   }
 
   async searchAllTransactions(): Promise<Transaction[]> {
-    return this.transactions;
+    return await this.transactionRepository.find();
   }
 
-  async searchTransaction(id: string): Promise<Transaction> {
-    const findedTransaction = this.transactions.find(transaction => transaction._id == id)
-    if (!findedTransaction) {
-      throw new NotFoundException(`Id da transação ${id} não encontrada`)
+  async searchTransaction(id: number): Promise<Transaction> {
+    const transaction = await this.transactionRepository.findOneBy({ id });
+    if (!transaction) {
+      throw new NotFoundException(`Id: ${id} not founded`);
     }
-      return findedTransaction
+    return transaction;
   }
 
-  private create(createTransactionDto: CreateTransactionDto): void {
-    const { nome, telefoneCelular, email } = createTransactionDto;
-    const transaction: Transaction = {
-      _id: uuidv4(),
-      nome,
-      telefoneCelular,
-      email,
-      ranking: 'A',
-      positionRaking: 1,
-      urlFotoTransaction: 'www.google.com.br/fotos123'
-    };
-    this.logger.log(`createTransactionDto: ${JSON.stringify(transaction)}`);
-    this.transactions.push(transaction);
+  private async create(createTransactionDto: CreateTransactionDto): Promise<void> {
+    const { date, title, place, amount, expenses, bank, type } = createTransactionDto;
+
+    const newTransaction = this.transactionRepository.create({
+      date,
+      title,
+      place,
+      amount,
+      expenses,
+      bank,
+      type,
+    });
+
+    this.logger.log(`Creating transaction: ${JSON.stringify(newTransaction)}`);
+    await this.transactionRepository.save(newTransaction);
   }
 
-  private update(findedTransaction: Transaction, createTransactionDto: CreateTransactionDto): void {
-    const index = this.transactions.findIndex(transaction => transaction._id === findedTransaction._id);
-    if (index !== -1) {
-      this.transactions[index] = {
-        ...findedTransaction,
-        ...createTransactionDto,
-        _id: findedTransaction._id
-      };
-      this.logger.log(`Updated transaction: ${JSON.stringify(this.transactions[index])}`);
-    }
+  private async update(existingTransaction: Transaction, updateTransactionDto: CreateTransactionDto): Promise<void> {
+    Object.assign(existingTransaction, updateTransactionDto);
+
+    this.logger.log(`Updating transaction: ${JSON.stringify(existingTransaction)}`);
+    await this.transactionRepository.save(existingTransaction);
   }
-  async deleteTransaction(id: string): Promise<void> {
-    const findedTransaction = this.transactions.find(transaction => transaction._id === id);
-    if (!findedTransaction) {
-        throw new Error(`Transaction with ID ${id} not found.`);
+
+  async deleteTransaction(id: Number): Promise<void> {
+    const transaction = await this.transactionRepository.findOneBy({ id });
+    if (!transaction) {
+      throw new NotFoundException(`Transaction with ID ${id} not found.`);
     }
-    this.transactions = this.transactions.filter(transaction => transaction._id !== id);    
+    await this.transactionRepository.remove(transaction);
   }
 }

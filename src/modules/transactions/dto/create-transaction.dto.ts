@@ -1,5 +1,10 @@
 export class CreateTransactionDto {
-    readonly telefoneCelular: string;
-    readonly email: string;
-    readonly nome: string;
+    readonly id: Number;
+    readonly date: Date;
+    readonly title: String;
+    readonly place: String;
+    readonly amount: Number;
+    readonly expenses: String;
+    readonly bank: String;
+    readonly type: String;
 }
